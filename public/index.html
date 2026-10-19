@@ -339,6 +339,8 @@
   .admin-bar p{ margin:0.2rem 0 0; font-size:0.82rem; color:var(--ink-muted); max-width:46ch; }
   .admin-bar .reset-btn{ white-space:nowrap; }
   .mistakes-card{ margin-bottom:0.4rem; }
+  .mist-head{ display:flex; align-items:center; justify-content:space-between; gap:0.8rem; }
+  .mist-head .mini-btn{ flex:none; }
   .mist-mod{ margin:1.1rem 0 0.3rem; font-family:"Manrope",sans-serif; font-weight:700; font-size:0.98rem; color:var(--ink); }
   .mist-list{ margin:0; padding-left:1.1rem; color:var(--ink-muted); font-size:0.95rem; line-height:1.55; }
   .mist-actions{ margin-top:1.3rem; text-align:center; }
@@ -2017,13 +2019,15 @@
 
       var mistakesHtml = "";
       if(q.wrong.length){
-        mistakesHtml = '<div class="mistakes"><h3>Над чим попрацювати</h3>'+
+        mistakesHtml = '<div class="mistakes"><div class="mist-head"><h3>Над чим попрацювати ('+q.wrong.length+')</h3>'+
+          '<button class="mini-btn" id="res-mist-toggle" aria-expanded="true">Згорнути</button></div>'+
+          '<div id="res-mist-body">'+
           q.wrong.map(function(w){
             return '<div class="mistake"><div class="m-q">'+w.item.q+'</div>'+
               '<p class="m-a">Твоя відповідь: <b>'+w.chosen+'</b></p>'+
               '<p class="m-a ok">Правильно: <b>'+w.item.correct+'</b></p>'+
               '<p class="m-e">'+w.item.explain+'</p></div>';
-          }).join("")+'</div>';
+          }).join("")+'</div></div>';
       }
 
       var actions = "";
@@ -2051,6 +2055,12 @@
       var on = function(id, fn){ var el = document.getElementById(id); if(el) el.addEventListener("click", fn); };
       on("continue-btn", function(){ closeDossier(); opts.onPass && opts.onPass(q.correct, total); });
       on("retry-btn", function(){ runQuiz(opts); });
+      on("res-mist-toggle", function(){
+        var body = document.getElementById("res-mist-body");
+        body.hidden = !body.hidden;
+        this.textContent = body.hidden ? "Розгорнути" : "Згорнути";
+        this.setAttribute("aria-expanded", String(!body.hidden));
+      });
       on("practice-btn", startMistakesPractice);
       on("again-btn", startMistakesPractice);
     }
@@ -2084,14 +2094,26 @@
       groups[m].push(QBANK[id].item.q);
     });
     card.innerHTML =
-      '<h3 class="info-title">Над чим попрацювати ('+ids.length+')</h3>'+
-      '<p class="info-modules">Питання, на які були неправильні відповіді. Повтори їх, і вони зникнуть зі списку. На проходження модулів це не впливає.</p>'+
-      order.map(function(m){
-        return '<div class="mist-mod">'+m+'</div><ul class="mist-list">'+groups[m].map(function(t){ return '<li>'+t+'</li>'; }).join("")+'</ul>';
-      }).join("")+
+      '<div class="mist-head">'+
+        '<h3 class="info-title">Над чим попрацювати ('+ids.length+')</h3>'+
+        '<button class="mini-btn" id="mist-toggle" aria-expanded="'+(!mistCollapsed)+'">'+(mistCollapsed ? "Розгорнути" : "Згорнути")+'</button>'+
+      '</div>'+
+      '<div id="mist-body"'+(mistCollapsed ? ' hidden' : '')+'>'+
+        '<p class="info-modules">Питання, на які були неправильні відповіді. Повтори їх, і вони зникнуть зі списку. На проходження модулів це не впливає.</p>'+
+        order.map(function(m){
+          return '<div class="mist-mod">'+m+'</div><ul class="mist-list">'+groups[m].map(function(t){ return '<li>'+t+'</li>'; }).join("")+'</ul>';
+        }).join("")+
+      '</div>'+
       '<div class="mist-actions"><button class="btn primary" id="mist-repeat">Повторити помилки</button></div>';
     document.getElementById("mist-repeat").addEventListener("click", startMistakesPractice);
+    document.getElementById("mist-toggle").addEventListener("click", function(){
+      mistCollapsed = !mistCollapsed;
+      document.getElementById("mist-body").hidden = mistCollapsed;
+      this.textContent = mistCollapsed ? "Розгорнути" : "Згорнути";
+      this.setAttribute("aria-expanded", String(!mistCollapsed));
+    });
   }
+  var mistCollapsed = false;
 
   function startMistakesPractice(){
     var ids = mistakeIds();
