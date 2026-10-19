@@ -1485,6 +1485,8 @@
   // store = { current: "email" | null, users: { "email": {user, passed, opened, finalPassed, score} } }
   // "Вийти" лише скидає current, прогрес лишається. Повторний вхід з тією
   // самою поштою відновлює його.
+  // Блок «Над чим попрацювати» на головній за замовчуванням згорнутий.
+  var mistCollapsed = true;
   var STORE_KEY = "ybcOnboardingV3";
   var store = { current:null, users:{} };
   // mistakes: { "ID питання": {chosen, at} }, питання зникає, коли на нього відповіли правильно.
@@ -2144,7 +2146,6 @@
       this.setAttribute("aria-expanded", String(!mistCollapsed));
     });
   }
-  var mistCollapsed = false;
 
   function startMistakesPractice(){
     var ids = mistakeIds();
