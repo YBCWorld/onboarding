@@ -5,6 +5,9 @@
  *  - вкладка "Загальне": старт, проходження модулів 1-6, фінальний тест;
  *  - вкладка "Sales Warsaw": відповіді на тест сьомого модуля для посади
  *    "Сейлз-менеджер Варшава" (по одному рядку на відповідь + рядок "ПІДСУМОК").
+ *  - вкладка "Прогрес" (створюється сама): збережений прогрес кожного
+ *    співробітника за поштою, щоб він не залежав від браузера й пристрою.
+ *    Її не редагуйте вручну.
  * Вкладки шукаються за номером (gid), потім за назвою. Якщо вкладки немає,
  * вона створюється.
  *
@@ -227,6 +230,73 @@ function setupHighlight() {
   });
 }
 
+// ---------------------------------------------------------------------
+// Прогрес співробітників (щоб він не залежав від браузера й пристрою)
+// Вкладка "Прогрес": один рядок на пошту, прогрес зберігається як JSON.
+// Цю вкладку не редагуйте вручну: сайт читає її при вході.
+// ---------------------------------------------------------------------
+var PROGRESS_TAB = { gid: -1, name: "Прогрес" };
+var PROGRESS_HEADERS = ["Email", "Ім'я", "Посада", "Оновлено (мс)", "Прогрес (JSON, не редагувати)"];
+
+function progressSheet_(ss) {
+  var sheet = getTab_(ss, PROGRESS_TAB);
+  if (sheet.getLastRow() === 0) {
+    sheet.appendRow(PROGRESS_HEADERS);
+    sheet.setFrozenRows(1);
+    sheet.getRange(1, 1, 1, PROGRESS_HEADERS.length).setFontWeight("bold");
+    sheet.getRange("A:E").setNumberFormat("@");
+  }
+  return sheet;
+}
+
+function findProgressRow_(sheet, email) {
+  var last = sheet.getLastRow();
+  if (last < 2) return 0;
+  var values = sheet.getRange(2, 1, last - 1, 1).getValues();
+  for (var i = 0; i < values.length; i++) {
+    if (String(values[i][0]).toLowerCase() === email) return i + 2;
+  }
+  return 0;
+}
+
+function saveProgress_(ss, data) {
+  var email = String(data.email || "").trim().toLowerCase();
+  if (!email) return;
+  var json = JSON.stringify(data.progress || {});
+  if (json.length > 45000) return;
+  var incoming = Number(data.updatedAt) || 0;
+  var sheet = progressSheet_(ss);
+  var row = findProgressRow_(sheet, email);
+  var record = [email, clean_(data.name), clean_(data.position), String(incoming), json];
+  if (row) {
+    // Старіша копія (наприклад, зі застарілої вкладки) не затирає новішу.
+    var stored = Number(sheet.getRange(row, 4).getValue()) || 0;
+    if (incoming < stored) return;
+    sheet.getRange(row, 1, 1, record.length).setValues([record]);
+  } else {
+    sheet.getRange(sheet.getLastRow() + 1, 1, 1, record.length).setValues([record]);
+  }
+}
+
+function loadProgress_(ss, data) {
+  var email = String(data.email || "").trim().toLowerCase();
+  if (!email) return { found: false };
+  var sheet = progressSheet_(ss);
+  var row = findProgressRow_(sheet, email);
+  if (!row) return { found: false };
+  var cells = sheet.getRange(row, 4, 1, 2).getValues()[0];
+  try {
+    return { found: true, updatedAt: Number(cells[0]) || 0, progress: JSON.parse(cells[1]) };
+  } catch (err) {
+    return { found: false };
+  }
+}
+
+function json_(obj) {
+  return ContentService.createTextOutput(JSON.stringify(obj))
+    .setMimeType(ContentService.MimeType.JSON);
+}
+
 function doPost(e) {
   var lock = LockService.getScriptLock();
   lock.waitLock(10000);
@@ -238,21 +308,22 @@ function doPost(e) {
       data = {};
     }
     // Порожній або некоректний запит (наприклад, ручний запуск) нічого не пише.
-    if (!data.email) {
-      return ContentService.createTextOutput(JSON.stringify({ status: "ignored" }))
-        .setMimeType(ContentService.MimeType.JSON);
-    }
+    if (!data.email) return json_({ status: "ignored" });
 
     var ss = SpreadsheetApp.openById(SPREADSHEET_ID);
-    if (data.type === "answers") {
-      writeAnswers_(ss, data);
-    } else {
-      writeGeneral_(ss, data);
+    if (data.type === "load") {
+      return json_(loadProgress_(ss, data));
     }
-
-    return ContentService
-      .createTextOutput(JSON.stringify({ status: "ok" }))
-      .setMimeType(ContentService.MimeType.JSON);
+    if (data.type === "progress") {
+      saveProgress_(ss, data);
+    } else if (data.type === "answers") {
+      writeAnswers_(ss, data);
+    } else if (data.event) {
+      writeGeneral_(ss, data);
+    } else {
+      return json_({ status: "ignored" });
+    }
+    return json_({ status: "ok" });
   } finally {
     lock.releaseLock();
   }
