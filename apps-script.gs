@@ -14,8 +14,10 @@
  * Правильна відповідь, Результат, Підсумок спроби, № у спробі, Категорія,
  * ID питання). Якщо заголовка немає, ця колонка просто пропускається.
  *
- * ПІДСВІТКА: клітинка "Результат" зі значенням "Помилка" фарбується
- * в ніжно-червоний (колір MISTAKE_COLOR). Решту форматування робите самі.
+ * ПІДСВІТКА: у вкладці "Sales Warsaw" увесь рядок, де в колонці "Результат"
+ * стоїть "Помилка", фарбується в ніжно-червоний (колір MISTAKE_COLOR) через
+ * умовне форматування. Воно діє на старі й нові рядки. Решту форматування
+ * робите самі.
  *
  * ЯК ПІДКЛЮЧИТИ (2 хвилини):
  * 1. Увійдіть в Google під акаунтом, який має РЕДАГУВАТИ таблицю
@@ -156,16 +158,73 @@ function writeAnswers_(ss, data) {
   });
 
   var res = appendByHeaders_(sheet, objects, ["Підсумок спроби", "№ у спробі"]);
+  ensureHighlightRule_(sheet, res.headers);
+}
 
-  // Підсвітка лише клітинки "Результат" з помилкою
-  var col = res.headers.indexOf("Результат");
-  if (col >= 0) {
-    for (var r = 0; r < objects.length; r++) {
-      if (objects[r]["Результат"] === "Помилка") {
-        sheet.getRange(res.start + r, col + 1).setBackground(MISTAKE_COLOR);
-      }
-    }
+// Номер колонки (1, 2, ...) у літеру (A, B, ... AA).
+function colLetter_(n) {
+  var s = "";
+  while (n > 0) {
+    var m = (n - 1) % 26;
+    s = String.fromCharCode(65 + m) + s;
+    n = Math.floor((n - 1) / 26);
   }
+  return s;
+}
+
+/**
+ * Умовне форматування: увесь рядок, де в колонці "Результат" стоїть
+ * "Помилка", фарбується в MISTAKE_COLOR. Діє на старі й нові рядки
+ * автоматично. Правило можна побачити й змінити в таблиці:
+ * Формат -> Умовне форматування.
+ */
+function ensureHighlightRule_(sheet, headers) {
+  var col = headers.indexOf("Результат");
+  if (col < 0) return;
+  var formula = '=$' + colLetter_(col + 1) + '2="Помилка"';
+  var width = headers.length;
+  var rows = Math.max(sheet.getMaxRows() - 1, 1);
+
+  var rules = sheet.getConditionalFormatRules();
+  var kept = [];
+  var alreadyOk = false;
+  for (var i = 0; i < rules.length; i++) {
+    var cond = rules[i].getBooleanCondition();
+    var isOurs = cond &&
+      cond.getCriteriaType() === SpreadsheetApp.BooleanCriteria.CUSTOM_FORMULA &&
+      /="Помилка"$/.test(String(cond.getCriteriaValues()[0]));
+    if (!isOurs) { kept.push(rules[i]); continue; }
+    var ranges = rules[i].getRanges();
+    if (!alreadyOk && cond.getCriteriaValues()[0] === formula &&
+        ranges.length === 1 && ranges[0].getNumColumns() === width && ranges[0].getRow() === 2) {
+      alreadyOk = true;
+      kept.push(rules[i]);
+    }
+    // інші наші застарілі правила (інша колонка чи ширина) відкидаємо
+  }
+  if (alreadyOk && kept.length === rules.length) return;
+  if (!alreadyOk) {
+    kept.push(SpreadsheetApp.newConditionalFormatRule()
+      .whenFormulaSatisfied(formula)
+      .setBackground(MISTAKE_COLOR)
+      .setRanges([sheet.getRange(2, 1, rows, width)])
+      .build());
+  }
+  sheet.setConditionalFormatRules(kept);
+}
+
+// Запустіть один раз вручну (вибрати "setupHighlight" і натиснути Run),
+// щоб підсвітка з'явилась на вже наявних рядках без нового тесту.
+function setupHighlight() {
+  var ss = SpreadsheetApp.openById(SPREADSHEET_ID);
+  Object.keys(ANSWER_TABS).forEach(function (key) {
+    var sheet = getTab_(ss, ANSWER_TABS[key]);
+    var width = Math.max(sheet.getLastColumn(), 1);
+    var headers = sheet.getRange(1, 1, 1, width).getValues()[0].map(function (h) {
+      return String(h).trim();
+    });
+    ensureHighlightRule_(sheet, headers);
+  });
 }
 
 function doPost(e) {
