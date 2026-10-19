@@ -329,6 +329,28 @@
   .info-item:last-child{ padding-bottom:0; }
   .info-item h4{ margin:0 0 0.3rem; font-family:"Manrope",sans-serif; font-weight:700; font-size:1.25rem; line-height:1.3; letter-spacing:0; text-transform:none; color:var(--ink); }
   .brief .info-item p{ margin:0; max-width:none; font-size:1rem; line-height:1.6; color:var(--ink-muted); }  .brief .path-note{ justify-content:center; margin-top:1.4rem; }
+  /* ---------- режим демонстрації (адмін) і помилки ---------- */
+  .admin-bar{
+    max-width:720px; margin:1rem auto 0; background:var(--surface-2); border:1px dashed var(--border);
+    border-radius:20px; padding:0.9rem 1.2rem; display:flex; align-items:center; justify-content:space-between;
+    gap:0.8rem; flex-wrap:wrap; text-align:left;
+  }
+  .admin-bar b{ font-family:"Oswald",sans-serif; font-weight:600; text-transform:uppercase; letter-spacing:0.06em; font-size:0.82rem; color:var(--ink); }
+  .admin-bar p{ margin:0.2rem 0 0; font-size:0.82rem; color:var(--ink-muted); max-width:46ch; }
+  .admin-bar .reset-btn{ white-space:nowrap; }
+  .mistakes-card{ margin-bottom:0.4rem; }
+  .mist-mod{ margin:1.1rem 0 0.3rem; font-family:"Manrope",sans-serif; font-weight:700; font-size:0.98rem; color:var(--ink); }
+  .mist-list{ margin:0; padding-left:1.1rem; color:var(--ink-muted); font-size:0.95rem; line-height:1.55; }
+  .mist-actions{ margin-top:1.3rem; text-align:center; }
+  .mistakes{ text-align:left; margin-top:1.4rem; }
+  .mistakes h3{ font-size:1.05rem; }
+  .mistake{ margin-top:0.8rem; padding:0.85rem 1rem; border-radius:16px; background:var(--surface-2); }
+  .mistake .m-q{ font-weight:700; font-size:0.92rem; color:var(--ink); }
+  .mistake .m-a{ margin:0.35rem 0 0; font-size:0.84rem; color:var(--ink-muted); }
+  .mistake .m-a b{ color:var(--ink); }
+  .mistake .m-a.ok b{ color:var(--good); }
+  .mistake .m-e{ margin:0.4rem 0 0; font-size:0.8rem; color:var(--ink-muted); }
+  .results .mistakes p{ text-align:left; }
   /* ---------- сенсорні екрани: без залипання :hover ---------- */
   @media (hover:none){
     .lock-btn:hover, .next-btn:hover{ background:var(--ink); color:var(--bg); }
@@ -455,7 +477,7 @@
       </div>
       <button class="gate-submit" id="gate-submit">Розпочати онбординг</button>
       <p class="gate-note" id="gate-saved" hidden>Ми знайшли твій прогрес. Він збережеться й відновиться після входу.</p>
-      <p class="gate-note">Ці дані підуть у звіт для HR, щоб бачити прогрес проходження онбордингу. Щоб продовжити пізніше, увійди з тією самою поштою в цьому ж браузері.</p>
+      <p class="gate-note">Ці дані підуть у звіт для HR, щоб бачити прогрес проходження онбордингу. У тесті карти посади HR також бачить питання, на яких були помилки: це допомагає підтримати тебе й покращити матеріали. Щоб продовжити пізніше, увійди з тією самою поштою в цьому ж браузері.</p>
     </div>
   </div>
 </div>
@@ -494,6 +516,14 @@
     </div>
   </div>
 
+  <div class="admin-bar" id="admin-bar" hidden>
+    <div>
+      <b>Режим демонстрації</b>
+      <p id="admin-text"></p>
+    </div>
+    <button class="reset-btn" id="admin-toggle"></button>
+  </div>
+
   <div class="brief">
     <div class="page-head">
       <h2 class="page-title">Стань частиною команди YBC</h2>
@@ -509,12 +539,14 @@
       <h3 class="info-title">Як це працює</h3>
       <div class="info-list">
         <div class="info-item"><h4>Тест після модулів 1-6</h4><p>Наступний модуль відкривається лише після проходження тесту.</p></div>
-        <div class="info-item"><h4>Прохідний поріг: 60%</h4><p>Потрібно відповісти правильно щонайменше на 5 питань.</p></div>
-        <div class="info-item"><h4>Сьомий модуль</h4><p>Ознайомся із картою посади та планом адаптації, заверши модуль кнопкою.</p></div>
+        <div class="info-item"><h4>Прохідний поріг: 60%</h4><p id="how-threshold">Потрібно відповісти правильно щонайменше на 5 питань.</p></div>
+        <div class="info-item"><h4>Сьомий модуль</h4><p id="how-seventh">Ознайомся із картою посади та планом адаптації, заверши модуль кнопкою.</p></div>
         <div class="info-item"><h4>Фінальний тест</h4><p>Після всіх семи модулів: 5 правильних відповідей, і ти офіційно в команді.</p></div>
       </div>
     </div>    <div class="path-note">Прогрес: <span class="chain" id="chain"></span></div>
   </div>
+
+  <div class="info-card mistakes-card" id="mistakes-card" hidden></div>
 
   <div class="board" id="board"></div>
 
@@ -556,6 +588,10 @@
   // (див. apps-script.gs та README.md: як його отримати)
   // ==================================================================
   var SHEET_WEBHOOK_URL = "ВСТАВТЕ_СЮДИ_URL_ВЕБДОДАТКУ_APPS_SCRIPT";
+
+  // Пошти з режимом демонстрації: усі модулі й тести відкриті без обмежень.
+  // Це лише зручність показу, а не захист: сайт статичний, перевірки пароля немає.
+  var ADMIN_EMAILS = ["yuliiamotuz@gmail.com"];
 
   // ==================================================================
   // КОНТЕНТ МОДУЛІВ 1-6. Наповнені на основі файлів з папки «Матеріали».
@@ -826,7 +862,7 @@
   // ПОСАДИ. Список для випадаючого списку на старті. Легко доповнити
   // новими позиціями, коли з'являться карти посад для них.
   // ==================================================================
-  var POSITIONS = ["Корпоративний секретар","Бізнес-менеджер","Сейлз-менеджер","Event-менеджер WISE","Event-менеджер Київ","IT Support Assistant","Head of HR"];
+  var POSITIONS = ["Корпоративний секретар","Бізнес-менеджер","Сейлз-менеджер","Сейлз-менеджер Варшава","Event-менеджер WISE","Event-менеджер Київ","IT Support Assistant","Head of HR"];
 
   // ==================================================================
   // КАРТИ ПОСАД. Сьомий модуль показує РІВНО ОДНУ карту: ту, що
@@ -1000,6 +1036,80 @@
         ["Проведення one-to-one", "https://www.notion.so/4-2-ONE-TO-ONE-310a2ff374c2809f907bf77d323a7a39?source=copy_link"],
         ["Проведення ланчу або мастермайнду", "https://www.notion.so/4-3-310a2ff374c280f48120f6d6c049b0d7?source=copy_link"],
         ["Закриття на угоду", "https://www.notion.so/4-4-310a2ff374c2803dbdf9ff475779784c?source=copy_link"]
+      ]
+    },
+    "Сейлз-менеджер Варшава": {
+      hook:"Місія, критерії кандидатів, бізнес-процеси від першого дзвінка до передачі клієнта бізнес-менеджеру та показники сейлз-менеджера Варшави.",
+      sections:[
+        ["Місія", "Продати максимальну кількість абонементів у клуб достойним підприємцям згідно з планами продажів. Допомогти клієнтам знайти якісні бізнес-знайомства, можливості для досягнення цілей і масштабування бізнесу."],
+        ["Очікувані результати", [
+          "Організація продажів: робота за бізнес-процесами компанії, особистий план продажів виконано щонайменше на 100%, у CRM немає помилок (внесені всі дані, є коментар після кожної комунікації, наприкінці дня немає протермінованих завдань, лідів і угод без завдань).",
+          "Знання продуктів і технологій продажів: середня оцінка розмов і зустрічей не менше 85 балів за чек-листом, коментарі Тімліда та керівника відділу продажів враховуються, мовлення грамотне.",
+          "Самодисципліна: тиждень сплановано з фокусом на ключових клієнтах, комунікація йде через корпоративні канали, завдання між відділами передаються через CRM, звіт Тімліду надсилається вчасно.",
+          "Менеджер знає свою МФС, може розрахувати зарплату й назвати відсоток виконання плану та залишок на кінець місяця."
+        ]],
+        ["Кого ми приймаємо в клуб", [
+          "Власник бізнесу з досвідом від 2 років. Для віку до 45 років оборот понад 100 тисяч доларів на рік, для категорії WISE (45+) від 1 мільйона доларів.",
+          "Людина, яка поділяє цінності клубу.",
+          "Клуб не приймає громадян РФ та РБ (включно з тими, хто має кілька громадянств) і людей зі зв'язками з РФ та РБ.",
+          "Точно ні: казино й ставки на спорт, мікрофінансові організації, стриптиз-клуби, салони еротичного масажу.",
+          "Розглядаємо індивідуально: самозайняті експерти, інвестори з портфельними інвестиціями, алкоголь і тютюн (дивимось на самого підприємця), навчання на тему сексу, секс-шопи."
+        ]],
+        ["Бізнес-процеси продажів", [
+          "4.1 Кваліфікація та виявлення потреб: лід беруть у роботу протягом 24 годин, перевіряють за чек-листом критеріїв, з'ясовують місто, сферу бізнесу, хобі, цілі та дату народження, пропонують зустріч one-to-one.",
+          "Якщо клієнт не відповідає, роблять до 4 спроб дозвону за графіком. Після четвертої лід закривають з причиною НДЗ.",
+          "4.2 One-to-one: нагадування за 24 години й зранку в день зустрічі, до 3 перенесень, індивідуальна презентація. Далі пропозиція вступити або запрошення на ланч-знайомство.",
+          "4.3 Ланч і мастермайнд: підтвердження за 24 години, оцінка кандидата учасниками (зелений, жовтий, помаранчевий, червоний), відеоповідомлення клієнту протягом 24 годин, стимуляція до угоди.",
+          "4.4 Закриття на угоду: підписання оферти в додатку, вибір способу оплати, реквізити, підтвердження оплати, запис у чаті «Внески» та в CRM, передача клієнта бізнес-менеджеру.",
+          "4.5 Актуалізація KYC: після ланчу менеджер отримує документ про оборот і завантажує його в поле KYC у CRM."
+        ]],
+        ["Ключові обов'язки", [
+          "Виконання плану продажів і рівня конверсії.",
+          "Обробка вхідних заявок: кваліфікація й виявлення потреб за скриптами компанії.",
+          "Зустрічі з клієнтами: one-to-one, ланчі та Великі заходи, сприяння в ННН, закриття на угоду.",
+          "Реквізити на оплату або договір, контроль оплати, дотримання домовленостей із клієнтом.",
+          "Якісне ведення CRM, щоденний звіт Тімліду, планування тижня.",
+          "Участь у щомісячних тет-а-тет із СОО, регулярних зборах і навчанні."
+        ]],
+        ["Компетенції", [
+          "Прийняття рішень, системність, орієнтація на результат.",
+          "Клієнтоорієнтованість, робота в команді, аналітичне мислення.",
+          "Комунікабельність і лояльність.",
+          "Кожну компетенцію оцінюють за рівнями від початкового до експертного."
+        ]],
+        ["Умови праці", [
+          "Офлайн-онлайн формат, ненормований робочий день, додаткова залученість за потреби.",
+          "Виплата заробітної плати до 10-го числа кожного місяця."
+        ]],
+        ["Показники ефективності", [
+          "Виконання особистого плану продажів і планової конверсії з цільового ліда в покупку.",
+          "Кількість розподілених і опрацьованих підходящих лідів.",
+          "Кількість дзвінків, дзвінків у базу й успішних дзвінків (довше 59 секунд).",
+          "Кількість призначених і проведених one-to-one.",
+          "Кількість учасників на ланчах і нових схвалених клубом.",
+          "Кількість і сума отриманих внесків (угод)."
+        ]],
+        ["Навчання та адаптація", [
+          "Шість навчальних блоків: про компанію, про продукти й послуги, про цільову аудиторію, про конкурентів, психологія продажів, стандарти й технології продажів.",
+          "Профільна адаптація, друга частина: після складання екзамену."
+        ]]
+      ],
+      keyTerms:["План продажів 100%","Кваліфікація за чек-листом","CRM без помилок"],
+      takeaway:"Сейлз-менеджер Варшави веде клієнта від першого дзвінка до передачі бізнес-менеджеру: кваліфікує за критеріями клубу, проводить one-to-one і ланчі, закриває угоду та тримає CRM без помилок. Орієнтири: план продажів 100% і середня оцінка розмов 85 балів.",
+      materials:[
+        ["Кваліфікація та виявлення потреб нового клієнта", "https://www.notion.so/4-1-2aea2ff374c280df9b46dfea92da8331?source=copy_link"],
+        ["Проведення one-to-one", "https://www.notion.so/4-2-ONE-TO-ONE-2afa2ff374c280228706f770c8baa67f?source=copy_link"],
+        ["Проведення ланчу або мастермайнду", "https://www.notion.so/4-3-2afa2ff374c2809da90ee4ccc0f74a83?source=copy_link"],
+        ["Закриття на угоду", "https://www.notion.so/4-4-2afa2ff374c2809c9a3fe5d1f3ecf9f1?source=copy_link"],
+        ["Актуалізація KYC", "https://www.notion.so/4-5-KYC-2afa2ff374c28028a615c160e27b116a?source=copy_link"],
+        ["Блок 1. Про компанію", "https://drive.google.com/file/d/1rCowutfGOJAh7-y1oRI4Rsc72HjOQCOf/view?usp=share_link"],
+        ["Блок 2. Про продукти та послуги", "https://drive.google.com/file/d/1h1QuD6JCwEpw8RZ94yGCIyF_JWZVQ0zy/view?usp=share_link"],
+        ["Блок 3. Цільова аудиторія", "https://drive.google.com/file/d/1S6sPZq9vfJpjxhvv7QOZ--dfcpDwHV_M/view?usp=sharing"],
+        ["Блок 4. Про конкурентів", "https://drive.google.com/file/d/1Zk6srrEsPDYY92Su9Q_07Vn7rSpZw6df/view?usp=sharing"],
+        ["Блок 4. Деталізація по конкурентах (таблиця)", "https://docs.google.com/spreadsheets/d/1GpbbbAtQBP8iuPuHznmROBp1oZ72Re1RV0XKTcTWZe4/edit?gid=0#gid=0"],
+        ["Блок 5. Психологія продажів", "https://drive.google.com/file/d/1e3-j12ya1GkTfBM3ru3tDtETGvSolrWV/view?usp=share_link"],
+        ["Блок 6. Стандарти та технології продажів", "https://drive.google.com/file/d/1Zv6dJcnnwgRkmC5SGdbOBvYD02cdExBr/view?usp=share_link"],
+        ["Профільна адаптація сейлз-менеджера (таблиця)", "https://docs.google.com/spreadsheets/d/1l6H7qLNN2uD5fnUbRs9whwkX4E_3xR1o32LRVdrtFJg/edit?gid=701885187#gid=701885187"]
       ]
     }
   };
@@ -1250,8 +1360,81 @@
     {q:"Кому підпорядковується Head of HR?", answers:["Managing Partner","Chief of BM","CEO філії","Head of IT"], correct:"Managing Partner", explain:"Підрозділ: Central Office. Формат роботи гібридний."}
   ];
 
+  // ------------------------------------------------------------------
+  // ТЕСТ СЬОМОГО МОДУЛЯ (для посад, де він є).
+  // required: обов'язкові питання, потрапляють у кожну спробу.
+  // pool: запасні, з них щоразу випадково береться take штук.
+  // Спроба = required + take із pool (тут 10 + 5 = 15), поріг 60% = 9 правильних.
+  // tab: назва вкладки в таблиці, куди йдуть відповіді (див. apps-script.gs).
+  // Порядок питань і варіантів щоразу інший, тому в таблицю пишеться
+  // ID питання та ТЕКСТ відповідей, а не літери A/B/C/D.
+  // ------------------------------------------------------------------
+  var POSITION_TEST = {};
+  POSITION_TEST["Сейлз-менеджер Варшава"] = {
+    tab:"Sales Warsaw", take:5,
+    required:[
+      {id:"sw-01", q:"Який річний оборот бізнесу потрібен кандидату віком до 45 років?", answers:["Понад 100 тисяч доларів","Понад 50 тисяч доларів","Понад 500 тисяч доларів","Понад 1 мільйон доларів"], correct:"Понад 100 тисяч доларів", explain:"Для категорії WISE (45+) потрібен оборот від 1 мільйона доларів на рік. Також потрібні щонайменше 2 роки досвіду й статус власника бізнесу."},
+      {id:"sw-02", q:"Кандидату 47 років, оборот його бізнесу 300 тисяч доларів на рік. Яке рішення?", answers:["Не підходить: для WISE потрібно від 1 млн $","Підходить: оборот понад 100 тисяч доларів","Підходить, якщо досвід бізнесу понад 5 років","Підходить, але лише як резиденту Клубу"], correct:"Не підходить: для WISE потрібно від 1 млн $", explain:"Після 45 років кандидат потрапляє в категорію WISE. Відмову фіксують у CRM, а клієнт отримує зворотний зв'язок за скриптом відмови не пізніше ніж через 24 години."},
+      {id:"sw-03", q:"Кого клуб не приймає незалежно від інших критеріїв?", answers:["Громадян РФ та РБ, навіть із другим громадянством","Лише громадян РФ без іншого громадянства","Підприємців із оборотом менше 1 мільйона доларів","Самозайнятих підприємців-експертів"], correct:"Громадян РФ та РБ, навіть із другим громадянством", explain:"Клуб не приймає громадян РФ та РБ (включно з тими, хто має кілька громадянств), навіть якщо їхній бізнес не пов'язаний з агресором. Так само відмовляють людям зі зв'язками з РФ та РБ."},
+      {id:"sw-04", q:"Скільки спроб дозвону передбачено, перш ніж лід закривають з причиною НДЗ?", answers:["4 спроби","3 спроби","5 спроб","6 спроб"], correct:"4 спроби", explain:"Четверта спроба фінальна: дзвінок, повідомлення на пошту й автоматична смс про те, що заявку закрито через недозвін протягом 10 днів. Після цього в CRM вносять причину відмови НДЗ."},
+      {id:"sw-05", q:"Протягом якого часу менеджер має взяти в роботу новий лід, що надійшов у робочий час?", answers:["Протягом 24 годин","Протягом 1 години","Протягом 48 годин","Протягом 3 робочих днів"], correct:"Протягом 24 годин", explain:"Якщо лід надійшов поза робочим часом, його беруть у роботу наступного робочого дня першочергово. Холодний лід менеджер сам вносить у CRM перед контактом із ЛПР."},
+      {id:"sw-06", q:"Дзвінок якої тривалості вважається успішним у показниках сейлз-менеджера Варшави?", answers:["Довший за 59 секунд","Довший за 30 секунд","Довший за 2 хвилини","Довший за 15 секунд"], correct:"Довший за 59 секунд", explain:"Окремо рахують загальну кількість дзвінків, дзвінки в базу, а також кількість призначених і проведених one-to-one."},
+      {id:"sw-07", q:"Скільки разів клієнт може перенести зустріч one-to-one?", answers:["До 3 разів","До 2 разів","До 5 разів","Без обмежень"], correct:"До 3 разів", explain:"Якщо клієнт не підключився, менеджер пропонує перепланувати зустріч і фіксує нову дату та час у Календарі CRM."},
+      {id:"sw-08", q:"Що означає жовта оцінка кандидата після ланчу?", answers:["Так, але активно придивитися під час кандидатства","Повторний ланч, щоб краще познайомитись","Однозначно так, можна одразу пропонувати вступ","Відмова з поясненням у відеоповідомленні"], correct:"Так, але активно придивитися під час кандидатства", explain:"Зелений: однозначно так. Помаранчевий: повторний ланч. Червоний: відмова. Рішення по кожному кандидату передають менеджеру в чаті Sales команди філії."},
+      {id:"sw-09", q:"На скільки відсотків сейлз-менеджер має виконати особистий план продажів?", answers:["Не менше ніж на 100%","Не менше ніж на 90%","Не менше ніж на 80%","Не менше ніж на 120%"], correct:"Не менше ніж на 100%", explain:"Це один із головних очікуваних результатів. Окремо відстежують виконання планової конверсії з цільового ліда в покупку."},
+      {id:"sw-10", q:"Коли бізнес-менеджер має надіслати welcome-повідомлення новому учаснику, якщо клієнта передали після 17:00?", answers:["Наступного дня до 10:00","Протягом 60 хвилин, навіть увечері","Наступного дня до 12:00","Протягом 3 годин після передачі"], correct:"Наступного дня до 10:00", explain:"Якщо передача відбулась до 17:00, welcome-повідомлення надсилають протягом 60 хвилин. Керівник БМ призначає відповідального протягом 30 хвилин."}
+    ],
+    pool:[
+      {id:"sw-11", q:"За який час до зустрічі one-to-one менеджер нагадує клієнту у спільному чаті?", answers:["За 24 години","За 2 години","За 3 дні","За тиждень"], correct:"За 24 години", explain:"Додатково в день зустрічі зранку надсилають повторне нагадування. Якщо клієнт підтвердив, починається підготовка до зустрічі."},
+      {id:"sw-12", q:"Коли планують one-to-one після кваліфікаційного дзвінка?", answers:["Через 1-2 дні після дзвінка","Того ж дня, одразу після дзвінка","Через 5-7 днів після дзвінка","Через 2 тижні після дзвінка"], correct:"Через 1-2 дні після дзвінка", explain:"Зустріч не повинна перетинатися з іншими активностями. Менеджер створює подію в Календарі й надсилає інвайт клієнту та відповідальному за проведення."},
+      {id:"sw-13", q:"Через який час менеджер планує повторну комунікацію з клієнтом, який після ланчу не готовий вступати?", answers:["Через 6 місяців","Через 1 місяць","Через 3 місяці","Через 12 місяців"], correct:"Через 6 місяців", explain:"Причини відмови менеджер фіксує в CRM і ставить задачу. Якщо клієнт не вирішив, його залучають до додаткових заходів: ланчів, «Ніколи не їж наодинці», Великих зустрічей чи мастермайндів."},
+      {id:"sw-14", q:"Протягом якого часу після ланчу СЕО філії або модератор записує клієнту відеоповідомлення з рішенням клубу?", answers:["Протягом 24 годин","Протягом 2 годин","Протягом 3 днів","Протягом тижня"], correct:"Протягом 24 годин", explain:"Негативний, позитивний і відгук на повторний ланч мають однакові терміни. Важливо зберегти лояльність клієнта й завершити на позитивній ноті."},
+      {id:"sw-15", q:"Куди менеджер подає заявку на рахунок, якщо клієнт платить від юридичної особи?", answers:["У чат «YBC World. Рахунки/Підписки»","У чат «YBC World. Внески»","У чат «Sales команда» філії","Напряму на пошту директору"], correct:"У чат «YBC World. Рахунки/Підписки»", explain:"Чат «Внески» призначений для фіксації факту оплати. Для українського ТОВ потрібні повна назва, ЄДРПОУ, юридична адреса, IBAN і ПІБ директора."},
+      {id:"sw-16", q:"Куди менеджер завантажує документ, що підтверджує оборот кандидата?", answers:["У поле «KYC» в CRM","У спільний чат ланчу","У картку учасника в Chargebee","На пошту бізнес-менеджеру"], correct:"У поле «KYC» в CRM", explain:"Зручний спосіб подання інформації про оборот менеджер уточнює в кандидата після ланчу. Про цей процес інформують бізнес-менеджера."},
+      {id:"sw-17", q:"У скільки разів, за матеріалом блоку 5, мозок сильніше прагне уникнути страждання, ніж отримати задоволення?", answers:["У 2 рази","У 3 рази","У 1,5 рази","Однаково"], correct:"У 2 рази", explain:"Страждання оцінюється як 2Х, задоволення як 1Х. Тому страх відмови й страх невдачі так сильно гальмують менеджера."},
+      {id:"sw-18", q:"Як у блоці 5 радять розраховувати ціль прибутку на поточний рік?", answers:["Прибуток минулого року плюс 25-50%","Прибуток минулого року плюс 10%","Подвоєний прибуток минулого року","Середній прибуток за останні 3 роки"], correct:"Прибуток минулого року плюс 25-50%", explain:"Ціль має бути реалістичною та записаною. Далі плановий обсяг ділять на 12 місяців, потім на 4 тижні й 5 днів."},
+      {id:"sw-19", q:"Менеджер торік заробив 18 000 $, середній заробіток з клієнта 150 $, ціль на рік плюс 50%. Скільки клієнтів потрібно залучити?", answers:["180 клієнтів","120 клієнтів","270 клієнтів","60 клієнтів"], correct:"180 клієнтів", explain:"Ціль прибутку: 18 000 + 50% = 27 000 $. Обсяг продажів: 27 000 / 150 = 180 клієнтів, тобто 15 на місяць."},
+      {id:"sw-20", q:"Яка мінімальна середня оцінка розмов і зустрічей за чек-листом очікується від сейлз-менеджера?", answers:["Не менше 85 балів","Не менше 70 балів","Не менше 90 балів","Не менше 100 балів"], correct:"Не менше 85 балів", explain:"Коментарі Тімліда та керівника відділу продажів під час аналізу розмов мають бути враховані в наступних комунікаціях."}
+    ]
+  };
+  POSITION_TEST["Сейлз-менеджер Варшава"].required.forEach(function(x){ x.req = true; });
+  POSITION_TEST["Сейлз-менеджер Варшава"].pool.forEach(function(x){ x.req = false; });
+
+  // Стабільні скорочення посад для ID питань (порядок у POSITIONS можна змінювати).
+  var POSITION_SLUG = {
+    "Корпоративний секретар":"secr", "Бізнес-менеджер":"bm", "Сейлз-менеджер":"sales", "Сейлз-менеджер Варшава":"sw",
+    "Event-менеджер WISE":"evw", "Event-менеджер Київ":"evk", "IT Support Assistant":"it", "Head of HR":"hr"
+  };
+
+  // Банк питань: ID -> {item, module, tab}. ID потрібні, щоб пам'ятати помилки
+  // та писати в таблицю, коли порядок питань і варіантів щоразу інший.
+  var QBANK = {};
+  function pad2(n){ return n < 10 ? "0"+n : String(n); }
+  function bankAdd(item, moduleName, tab){
+    QBANK[item.id] = { item:item, module:moduleName, tab:tab || "" };
+  }
+  CASES.forEach(function(c){
+    c.quiz.forEach(function(item, i){ item.id = item.id || (c.id + "-" + pad2(i+1)); bankAdd(item, c.name); });
+  });
+  Object.keys(POSITION_FINAL_QUIZ).forEach(function(pos){
+    POSITION_FINAL_QUIZ[pos].forEach(function(item, i){
+      item.id = item.id || ("pf-" + POSITION_SLUG[pos] + "-" + pad2(i+1));
+      bankAdd(item, "План адаптації: " + pos);
+    });
+  });
+  Object.keys(POSITION_TEST).forEach(function(pos){
+    var t = POSITION_TEST[pos];
+    t.required.concat(t.pool).forEach(function(item){ bankAdd(item, "План адаптації: " + pos, t.tab); });
+  });
+
+  // Питання спроби: усі обов'язкові + випадкові із запасних.
+  function testQuestions(t){
+    return t.required.concat(shuffle(t.pool).slice(0, t.take));
+  }
+
   // Сьомий модуль: збирається з карти посади, обраної на старті.
-  // Тесту немає (noQuiz): модуль завершується кнопкою ознайомлення.
+  // Є тест (POSITION_TEST): модуль завершується тестом.
+  // Немає тесту (noQuiz): модуль завершується кнопкою ознайомлення.
   function buildAdaptiveCase(position){
     var card = POSITION_CARDS[position];
     var pos = position || "обрану посаду";
@@ -1266,7 +1449,8 @@
       .concat(card.sections.map(function(s){ return {title:s[0], body:s[1]}; }))
       .concat([{title:"Головний висновок", body:card.takeaway}]);
     return {
-      id:"adaptive", noQuiz:true, name:"План адаптації: "+pos, category:"Адаптація · карта посади", color:"var(--accent)",
+      id:"adaptive", noQuiz:!POSITION_TEST[position], test:POSITION_TEST[position] || null,
+      name:"План адаптації: "+pos, category:"Адаптація · карта посади", color:"var(--accent)",
       hook:card.hook,
       doc:{ sections:card.sections, keyTerms:card.keyTerms, takeaway:card.takeaway },
       slides:slides,
@@ -1286,12 +1470,15 @@
   // самою поштою відновлює його.
   var STORE_KEY = "ybcOnboardingV3";
   var store = { current:null, users:{} };
-  function emptyProgress(user){ return { user:user || null, passed:{}, opened:{}, finalPassed:false, score:0, correct:0, answered:0 }; }
+  // mistakes: { "ID питання": {chosen, at} }, питання зникає, коли на нього відповіли правильно.
+  // attempts: { "id модуля": номер останньої спроби }. demoLocks: лише для режиму демонстрації.
+  function emptyProgress(user){ return { user:user || null, passed:{}, opened:{}, finalPassed:false, score:0, correct:0, answered:0, mistakes:{}, attempts:{}, demoLocks:false }; }
   function normalizeProgress(src){
     return { user:src.user, passed:src.passed || {}, opened:src.opened || {}, finalPassed:!!src.finalPassed,
       score:typeof src.score === "number" ? src.score : 0,
       correct:typeof src.correct === "number" ? src.correct : 0,
-      answered:typeof src.answered === "number" ? src.answered : 0 };
+      answered:typeof src.answered === "number" ? src.answered : 0,
+      mistakes:src.mistakes || {}, attempts:src.attempts || {}, demoLocks:!!src.demoLocks };
   }
   function emailKey(email){ return String(email || "").trim().toLowerCase(); }
 
@@ -1331,9 +1518,13 @@
     }catch(e){}
   }
 
-  function sendEvent(eventType, details, score){
+  function isAdmin(){ return !!(state.user && ADMIN_EMAILS.indexOf(emailKey(state.user.email)) >= 0); }
+  // Режим демонстрації без обмежень: адмін, поки не ввімкнено «як у новачка».
+  function adminFree(){ return isAdmin() && !state.demoLocks; }
+
+  function postToSheet(payload){
     if(!SHEET_WEBHOOK_URL || SHEET_WEBHOOK_URL.indexOf("ВСТАВТЕ") === 0){
-      console.warn("Google Sheets webhook не налаштований. Подія не надіслана:", eventType, details, score);
+      console.warn("Google Sheets webhook не налаштований. Не надіслано:", payload);
       return;
     }
     try{
@@ -1341,16 +1532,41 @@
         method:"POST",
         mode:"no-cors",
         headers:{ "Content-Type":"text/plain;charset=utf-8" },
-        body: JSON.stringify({
-          name: state.user ? state.user.name : "",
-          position: state.user ? state.user.position : "",
-          email: state.user ? state.user.email : "",
-          event: eventType,
-          details: details,
-          score: score
-        })
+        body: JSON.stringify(payload)
       });
     }catch(e){ console.warn("Sheets webhook error", e); }
+  }
+
+  // Рядки адміна в таблиці позначаються [демо], щоб не плутати зі справжніми співробітниками.
+  function sheetName(){
+    if(!state.user) return "";
+    return (isAdmin() ? "[демо] " : "") + state.user.name;
+  }
+
+  function sendEvent(eventType, details, score){
+    postToSheet({
+      name: sheetName(),
+      position: state.user ? state.user.position : "",
+      email: state.user ? state.user.email : "",
+      event: eventType,
+      details: details,
+      score: score
+    });
+  }
+
+  // Відповіді на питання тесту посади: по рядку на відповідь, у вкладку tab.
+  function sendAnswers(tab, kind, attempt, answers, summary){
+    postToSheet({
+      type: "answers",
+      tab: tab,
+      name: sheetName(),
+      position: state.user ? state.user.position : "",
+      email: state.user ? state.user.email : "",
+      kind: kind,
+      attempt: attempt,
+      summary: summary,
+      answers: answers
+    });
   }
 
   // ---------- gate ----------
@@ -1380,8 +1596,39 @@
     document.getElementById("main-wrap").hidden = false;
     document.getElementById("stat-user").textContent = state.user.name;
     document.getElementById("stat-position").textContent = state.user.position || "";
+    renderHowItWorks(); renderAdminBar(); renderMistakes();
     renderBoard(); updateHUD(); checkSynthesis();
   }
+
+  // Текст про сьомий модуль залежить від посади: з тестом або без.
+  function renderHowItWorks(){
+    var last = MODULES[MODULES.length - 1];
+    var seventh = document.getElementById("how-seventh");
+    if(last && last.test){
+      var t = last.test, n = t.required.length + t.take;
+      seventh.textContent = "Ознайомся із картою посади та планом адаптації, потім пройди тест: "+n+" питань, щонайменше "+Math.ceil(n*0.6)+" правильних відповідей.";
+    } else {
+      seventh.textContent = "Ознайомся із картою посади та планом адаптації, заверши модуль кнопкою.";
+    }
+  }
+
+  // Блок для адміна: модулі відкриті без обмежень, можна вмикати «як у новачка».
+  function renderAdminBar(){
+    var bar = document.getElementById("admin-bar");
+    bar.hidden = !isAdmin();
+    if(!isAdmin()) return;
+    var free = !state.demoLocks;
+    document.getElementById("admin-text").textContent = free
+      ? "Усі модулі й фінальний тест відкриті без обмежень, тести можна проходити багато разів. Рядки в таблиці позначаються [демо]."
+      : "Модулі відкриваються послідовно, як у новачка. Так видно, як працює блокування.";
+    var btn = document.getElementById("admin-toggle");
+    btn.textContent = free ? "Увімкнути послідовність" : "Відкрити все без обмежень";
+  }
+  document.getElementById("admin-toggle").addEventListener("click", function(){
+    state.demoLocks = !state.demoLocks;
+    persist();
+    renderAdminBar(); renderBoard(); updateHUD();
+  });
 
   document.getElementById("gate-submit").addEventListener("click", function(){
     var name = document.getElementById("in-name").value.trim();
@@ -1438,7 +1685,7 @@
 
   // ---------- board logic ----------
   function passedCount(){ return Object.keys(state.passed).filter(function(k){return state.passed[k];}).length; }
-  function isUnlocked(i){ return i===0 || !!state.passed[MODULES[i-1].id]; }
+  function isUnlocked(i){ return adminFree() || i===0 || !!state.passed[MODULES[i-1].id]; }
 
   function updateHUD(){
     document.getElementById("stat-passed").textContent = passedCount();
@@ -1451,13 +1698,14 @@
     var pct = Math.round(passedCount() / MODULES.length * 100);
     fb.style.setProperty("--p", pct + "%");
     fb.title = "Пройдено модулів: " + passedCount() + " з " + MODULES.length;
-    if(state.finalPassed){ fb.textContent = "Фінальний тест пройдено"; fb.className = "final-btn done"; fb.disabled = true; }
-    else if(passedCount() >= MODULES.length){ fb.textContent = "Фінальний тест"; fb.className = "final-btn ready"; fb.disabled = false; }
+    var finalOpen = passedCount() >= MODULES.length || adminFree();
+    if(state.finalPassed && !adminFree()){ fb.textContent = "Фінальний тест пройдено"; fb.className = "final-btn done"; fb.disabled = true; }
+    else if(finalOpen){ fb.textContent = "Фінальний тест"; fb.className = "final-btn ready"; fb.disabled = false; }
     else{ fb.textContent = "Фінальний тест"; fb.className = "final-btn"; fb.disabled = true; }
 
     // Блок під дошкою: підказка й кнопка запуску фінального тесту
     var locked = document.getElementById("synth-locked");
-    if(!state.finalPassed && passedCount() >= MODULES.length){
+    if(!state.finalPassed && finalOpen){
       var total = finalPoolSize();
       var need = Math.ceil(total * 0.7);
       locked.innerHTML =
@@ -1499,7 +1747,8 @@
             '<p class="back-ux">'+c.hook+'</p>'+
             '<div class="back-actions">'+
               '<button class="mini-btn" data-open="'+c.id+'">Матеріал</button>'+
-              (passed || c.noQuiz ? '' : '<button class="mini-btn quiz" data-quiz="'+c.id+'">Пройти тест</button>')+
+              (c.noQuiz || (passed && !isAdmin()) ? '' : '<button class="mini-btn quiz" data-quiz="'+c.id+'">Пройти тест</button>')+
+              (isAdmin() ? '<button class="mini-btn" data-fold="'+c.id+'">Закрити модуль</button>' : '')+
             '</div>'+
           '</div>'+
         '</div>';
@@ -1526,6 +1775,13 @@
       });
       container.querySelectorAll("[data-quiz]").forEach(function(btn){
         btn.addEventListener("click", function(){ openCaseQuiz(btn.getAttribute("data-quiz")); });
+      });
+      container.querySelectorAll("[data-fold]").forEach(function(btn){
+        btn.addEventListener("click", function(){
+          var id = btn.getAttribute("data-fold");
+          state.opened[id] = false; persist();
+          document.getElementById("flip-"+id).classList.remove("flipped");
+        });
       });
     });
   }
@@ -1587,7 +1843,8 @@
       '<div class="dossier-footer">'+
         (c.noQuiz
           ? (passed ? '<span class="stamp-mini pass">ОЗНАЙОМЛЕНО</span>' : '<button class="btn primary" id="mark-read">Ознайомився(-лась), завершити модуль</button>')
-          : (passed ? '<span class="stamp-mini pass">ТЕСТ ПРОЙДЕНО</span>' : '<button class="btn primary" id="go-quiz">Пройти тест по модулю</button>'))+
+          : (passed ? '<span class="stamp-mini pass">ТЕСТ ПРОЙДЕНО</span>' : '')+
+            (!passed || isAdmin() ? '<button class="btn primary" id="go-quiz">Пройти тест по модулю</button>' : ''))+
       '</div>';
 
     document.getElementById("close-dossier").addEventListener("click", closeDossier);
@@ -1671,14 +1928,23 @@
   }
 
   function runQuiz(opts){
-    var q = { order: shuffle(opts.questions.map(function(_,i){return i;})), index:0, correct:0, streak:0 };
+    // getQuestions: питання збираються заново для кожної спроби (тест сьомого модуля).
+    var questions = opts.getQuestions ? opts.getQuestions() : opts.questions;
+    var need = opts.practice ? 0 : Math.ceil(questions.length * opts.percent / 100);
+    var attempt = 0;
+    if(opts.attemptModule){
+      attempt = (state.attempts[opts.attemptModule] || 0) + 1;
+      state.attempts[opts.attemptModule] = attempt;
+      persist();
+    }
+    var q = { order: shuffle(questions.map(function(_,i){return i;})), index:0, correct:0, streak:0, wrong:[], log:[] };
     document.getElementById("overlay").hidden = false;
     renderQ();
 
     function renderQ(){
       var box = document.getElementById("dossier-content");
       if(q.index >= q.order.length){ renderRes(); return; }
-      var item = opts.questions[q.order[q.index]];
+      var item = questions[q.order[q.index]];
       var opt = shuffle(item.answers);
       var dots = q.order.map(function(_,i){ return '<i class="'+(i<q.index?"done":(i===q.index?"current":""))+'"></i>'; }).join("");
       box.innerHTML =
@@ -1711,10 +1977,18 @@
         else if(opt[i] === chosen) b.classList.add("wrong");
       });
       var ok = chosen === item.correct;
-      state.answered++;
-      if(ok){ q.correct++; q.streak++; state.score += opts.pointsPer; state.correct++; }
+      // Повторення помилок не входить у загальну статистику й бали.
+      if(!opts.practice) state.answered++;
+      if(ok){ q.correct++; q.streak++; if(!opts.practice){ state.score += opts.pointsPer; state.correct++; } }
       else{ q.streak = 0; }
-      persist(); updateHUD();
+      // Помилки запам'ятовуються лише для питань з ID; правильна відповідь прибирає питання зі списку.
+      if(item.id){
+        if(ok) delete state.mistakes[item.id];
+        else{ state.mistakes[item.id] = { chosen:chosen, at:new Date().toISOString() }; q.wrong.push({ item:item, chosen:chosen }); }
+      }
+      q.log.push({ n:q.index+1, id:item.id || "", cat:item.req ? "Обов'язкове" : (item.req === false ? "Запасне" : ""),
+        q:item.q, chosen:chosen, correct:item.correct, ok:ok });
+      persist(); updateHUD(); renderMistakes();
       var slot = document.getElementById("explain-slot");
       slot.innerHTML = '<div class="explain">'+(ok?"Правильно. ":"Неправильно. ")+item.explain+'</div>'+
         '<button class="next-btn" id="next-q">'+(q.index+1<q.order.length ? "Далі" : "Показати результат")+'</button>';
@@ -1723,28 +1997,112 @@
 
     function renderRes(){
       var box = document.getElementById("dossier-content");
-      var pass = q.correct >= opts.passThreshold;
+      var total = q.order.length;
+      var practice = !!opts.practice;
+      var pass = practice || q.correct >= need;
+      var summary = q.correct + "/" + total;
+
+      // Відповіді на питання тесту посади йдуть у відповідну вкладку таблиці.
+      sendLoggedAnswers(opts.kind || "Тест", attempt || "", q.log, practice ? summary : summary + " · " + (pass ? "Пройдено" : "Не пройдено"));
+
+      var head, sub;
+      if(practice){
+        head = q.wrong.length ? "Ще є над чим попрацювати" : "Усе повторено";
+        sub = q.wrong.length ? "Правильно: "+q.correct+" з "+total+". Питання нижче залишились у списку." : "Усі питання цього повторення вже відомі. Список помилок порожній.";
+      } else {
+        head = pass ? "Тест пройдено" : "Тест не пройдено";
+        sub = pass ? "Потрібний поріг ("+opts.percent+"% і вище) досягнуто. Можна рухатись далі."
+                   : "Потрібно щонайменше "+need+" з "+total+" правильних ("+opts.percent+"% і вище). Спробуйте ще раз.";
+      }
+
+      var mistakesHtml = "";
+      if(q.wrong.length){
+        mistakesHtml = '<div class="mistakes"><h3>Над чим попрацювати</h3>'+
+          q.wrong.map(function(w){
+            return '<div class="mistake"><div class="m-q">'+w.item.q+'</div>'+
+              '<p class="m-a">Твоя відповідь: <b>'+w.chosen+'</b></p>'+
+              '<p class="m-a ok">Правильно: <b>'+w.item.correct+'</b></p>'+
+              '<p class="m-e">'+w.item.explain+'</p></div>';
+          }).join("")+'</div>';
+      }
+
+      var actions = "";
+      if(practice){
+        actions += q.wrong.length ? '<button class="btn primary" id="again-btn">Повторити ще раз</button>' : '';
+      } else {
+        actions += pass ? '<button class="btn primary" id="continue-btn">Продовжити</button>' : '<button class="btn primary" id="retry-btn">Спробувати ще раз</button>';
+        actions += q.wrong.length ? '<button class="btn" id="practice-btn">Повторити помилки</button>' : '';
+      }
+      actions += '<button class="btn" id="close-btn">Закрити</button>';
+
       box.innerHTML =
         '<div class="dossier-head"><h2>'+opts.title+'</h2><button class="close-x" id="close-dossier">Закрити</button></div>'+
         '<div class="results">'+
-          '<div class="mono" style="font-size:0.72rem;color:var(--ink-muted);text-transform:uppercase;letter-spacing:0.08em;">Результат тесту</div>'+
-          '<div class="rank '+(pass?"pass":"fail")+'">'+(pass ? "Тест пройдено" : "Тест не пройдено")+'</div>'+
-          '<div class="score-big">'+q.correct+' / '+q.order.length+'</div>'+
-          '<p>'+(pass ? "Потрібний поріг ("+opts.percent+"% і вище) досягнуто. Можна рухатись далі." : "Потрібно щонайменше "+opts.passThreshold+" з "+q.order.length+" правильних ("+opts.percent+"% і вище). Спробуйте ще раз.")+'</p>'+
-          '<div class="results-actions">'+
-            (pass ? '<button class="btn primary" id="continue-btn">Продовжити</button>' : '<button class="btn primary" id="retry-btn">Спробувати ще раз</button>')+
-            '<button class="btn" id="close-btn">Закрити</button>'+
-          '</div>'+
+          '<div class="mono" style="font-size:0.72rem;color:var(--ink-muted);text-transform:uppercase;letter-spacing:0.08em;">'+(practice ? "Повторення помилок" : "Результат тесту")+'</div>'+
+          '<div class="rank '+(practice ? (q.wrong.length ? "" : "pass") : (pass?"pass":"fail"))+'">'+head+'</div>'+
+          '<div class="score-big">'+q.correct+' / '+total+'</div>'+
+          '<p>'+sub+'</p>'+
+          '<div class="results-actions">'+actions+'</div>'+
+          mistakesHtml+
         '</div>';
       document.getElementById("close-dossier").addEventListener("click", closeDossier);
       document.getElementById("close-btn").addEventListener("click", closeDossier);
       scrollModalTop();
-      if(pass){
-        document.getElementById("continue-btn").addEventListener("click", function(){ closeDossier(); opts.onPass && opts.onPass(q.correct, q.order.length); });
-      } else {
-        document.getElementById("retry-btn").addEventListener("click", function(){ runQuiz(opts); });
-      }
+      var on = function(id, fn){ var el = document.getElementById(id); if(el) el.addEventListener("click", fn); };
+      on("continue-btn", function(){ closeDossier(); opts.onPass && opts.onPass(q.correct, total); });
+      on("retry-btn", function(){ runQuiz(opts); });
+      on("practice-btn", startMistakesPractice);
+      on("again-btn", startMistakesPractice);
     }
+  }
+
+  // Журнал відповідей спроби: лише питання, у яких є вкладка в таблиці (тест посади).
+  function sendLoggedAnswers(kind, attempt, log, summary){
+    var byTab = {};
+    log.forEach(function(r){
+      var meta = QBANK[r.id];
+      if(!meta || !meta.tab) return;
+      (byTab[meta.tab] = byTab[meta.tab] || []).push(r);
+    });
+    Object.keys(byTab).forEach(function(tab){ sendAnswers(tab, kind, attempt, byTab[tab], summary); });
+  }
+
+  // ---------- помилки: список і повторення ----------
+  function mistakeIds(){
+    return Object.keys(state.mistakes).filter(function(id){ return !!QBANK[id]; });
+  }
+
+  function renderMistakes(){
+    var card = document.getElementById("mistakes-card");
+    var ids = mistakeIds();
+    card.hidden = !ids.length;
+    if(!ids.length){ card.innerHTML = ""; return; }
+    var groups = {}, order = [];
+    ids.forEach(function(id){
+      var m = QBANK[id].module;
+      if(!groups[m]){ groups[m] = []; order.push(m); }
+      groups[m].push(QBANK[id].item.q);
+    });
+    card.innerHTML =
+      '<h3 class="info-title">Над чим попрацювати ('+ids.length+')</h3>'+
+      '<p class="info-modules">Питання, на які були неправильні відповіді. Повтори їх, і вони зникнуть зі списку. На проходження модулів це не впливає.</p>'+
+      order.map(function(m){
+        return '<div class="mist-mod">'+m+'</div><ul class="mist-list">'+groups[m].map(function(t){ return '<li>'+t+'</li>'; }).join("")+'</ul>';
+      }).join("")+
+      '<div class="mist-actions"><button class="btn primary" id="mist-repeat">Повторити помилки</button></div>';
+    document.getElementById("mist-repeat").addEventListener("click", startMistakesPractice);
+  }
+
+  function startMistakesPractice(){
+    var ids = mistakeIds();
+    if(!ids.length) return;
+    runQuiz({
+      title: "Повторення помилок",
+      questions: ids.map(function(id){ return QBANK[id].item; }),
+      practice: true,
+      kind: "Повтор помилок",
+      pointsPer: 0
+    });
   }
 
   function openCaseQuiz(id){
@@ -1752,9 +2110,12 @@
     if(!c) return;
     runQuiz({
       title: "Тест: "+c.name,
-      questions: c.quiz,
+      // Тест сьомого модуля збирається заново для кожної спроби: обов'язкові + випадкові запасні
+      questions: c.test ? null : c.quiz,
+      getQuestions: c.test ? function(){ return testQuestions(c.test); } : null,
+      attemptModule: c.id,
+      kind: "Тест",
       percent: 60, // 60% і вище відкриває наступний модуль
-      passThreshold: Math.ceil(c.quiz.length*0.6),
       pointsPer: 15,
       onPass: function(correct, total){
         state.passed[c.id] = true;
@@ -1770,12 +2131,13 @@
   // питання з карти посади (модуль 7 власного тесту не має).
   function finalPool(){
     return MODULES.map(function(c){
-      var src = (c.quiz && c.quiz.length) ? c.quiz : (c.finalQuiz || []);
+      // у тесті посади для фінального тесту беруться лише обов'язкові питання
+      var src = (c.quiz && c.quiz.length) ? c.quiz : (c.test ? c.test.required : (c.finalQuiz || []));
       return src.length ? shuffle(src)[0] : null;
     }).filter(Boolean);
   }
   function finalPoolSize(){
-    return MODULES.filter(function(c){ return (c.quiz && c.quiz.length) || (c.finalQuiz && c.finalQuiz.length); }).length;
+    return MODULES.filter(function(c){ return (c.quiz && c.quiz.length) || c.test || (c.finalQuiz && c.finalQuiz.length); }).length;
   }
 
   function openFinalTest(){
@@ -1784,7 +2146,8 @@
       title: "Фінальний тест",
       questions: pool,
       percent: 70,
-      passThreshold: Math.ceil(pool.length*0.7),
+      kind: "Фінальний тест",
+      attemptModule: "final",
       pointsPer: 20,
       onPass: function(correct, total){
         state.finalPassed = true;
@@ -1797,7 +2160,7 @@
   }
 
   document.getElementById("final-btn").addEventListener("click", function(){
-    if(passedCount() >= MODULES.length && !state.finalPassed) openFinalTest();
+    if((passedCount() >= MODULES.length && !state.finalPassed) || adminFree()) openFinalTest();
   });
 
   document.getElementById("reset-btn").addEventListener("click", function(){
@@ -1805,6 +2168,7 @@
     var user = state.user;
     state = emptyProgress(user);
     persist();
+    renderMistakes(); renderAdminBar();
     renderBoard(); updateHUD();
     document.getElementById("synth-locked").hidden = false;
     document.getElementById("synth-unlocked").hidden = true;
