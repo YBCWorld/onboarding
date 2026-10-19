@@ -212,6 +212,24 @@
     display:flex; align-items:flex-start; justify-content:center; padding:4vh 1rem; z-index:50; overflow-y:auto;
   }
   .overlay[hidden]{ display:none; }
+  /* вікно підтвердження: по центру екрана, над іншими вікнами */
+  .overlay.confirm-overlay{ align-items:center; z-index:60; }
+  .confirm-box{
+    background:var(--surface); border:1px solid var(--border); border-radius:24px; box-shadow:var(--shadow);
+    max-width:460px; width:100%; padding:1.8rem 1.6rem 1.5rem; text-align:center;
+  }
+  .confirm-box h2{ font-size:1.5rem; line-height:1.15; }
+  .confirm-box .confirm-lead{ margin:0.9rem 0 0; font-size:1rem; line-height:1.55; color:var(--ink); }
+  .confirm-note{ margin:1.1rem 0 0; padding:0.85rem 1rem; border-radius:16px; background:var(--surface-2); text-align:left; font-size:0.9rem; line-height:1.55; color:var(--ink-muted); }
+  .confirm-note b{ color:var(--ink); }
+  .confirm-note ul{ margin:0.4rem 0 0; padding-left:1.1rem; }
+  .confirm-actions{ display:flex; gap:0.6rem; justify-content:center; margin-top:1.4rem; flex-wrap:wrap; }
+  .btn.danger{ background:var(--accent); border-color:var(--accent); color:#fff; }
+  .btn.danger:hover{ background:var(--accent-strong); border-color:var(--accent-strong); color:#fff; }
+  @media (max-width:640px){
+    .confirm-actions{ flex-direction:column-reverse; }
+    .confirm-actions .btn{ width:100%; min-height:52px; font-size:0.95rem; }
+  }
   .dossier{
     background:var(--surface); border:1px solid var(--border); border-radius:22px;
     max-width:620px; width:100%; padding:1.5rem; box-shadow:var(--shadow); margin-bottom:2rem;
@@ -581,6 +599,26 @@
 
 <div class="overlay" id="overlay" hidden>
   <div class="dossier" id="dossier-content"></div>
+</div>
+
+<div class="overlay confirm-overlay" id="reset-confirm" hidden>
+  <div class="confirm-box" role="alertdialog" aria-modal="true" aria-labelledby="reset-title" aria-describedby="reset-desc">
+    <h2 id="reset-title">Точно бажаєте скинути прогрес?</h2>
+    <p class="confirm-lead" id="reset-desc">Після скидання вашу роботу в онбордингу буде розпочато заново.</p>
+    <div class="confirm-note">
+      <b>Що станеться:</b>
+      <ul>
+        <li>прогрес обнулиться: усі модулі стануть непройденими;</li>
+        <li>фінальний тест і результати тестів буде скинуто;</li>
+        <li>лічильник правильних відповідей і список помилок зникнуть.</li>
+      </ul>
+      <p style="margin:0.6rem 0 0;">Цю дію не можна скасувати.</p>
+    </div>
+    <div class="confirm-actions">
+      <button class="btn danger" id="reset-yes">Так, скинути прогрес</button>
+      <button class="btn" id="reset-no">Ні, залишити як є</button>
+    </div>
+  </div>
 </div>
 
 <script>
@@ -2217,8 +2255,19 @@
     if((passedCount() >= MODULES.length && !state.finalPassed) || adminFree()) openFinalTest();
   });
 
+  // Скидання прогресу: спершу вікно підтвердження з поясненням наслідків.
+  var resetBox = document.getElementById("reset-confirm");
+  function closeResetConfirm(){ resetBox.hidden = true; document.body.classList.remove("modal-open"); }
   document.getElementById("reset-btn").addEventListener("click", function(){
-    if(!window.confirm("Скинути весь прогрес для " + state.user.email + "? Модулі й бали буде обнулено.")) return;
+    resetBox.hidden = false;
+    document.body.classList.add("modal-open");
+    document.getElementById("reset-no").focus();
+  });
+  document.getElementById("reset-no").addEventListener("click", closeResetConfirm);
+  resetBox.addEventListener("click", function(e){ if(e.target === resetBox) closeResetConfirm(); });
+  document.addEventListener("keydown", function(e){ if(e.key === "Escape" && !resetBox.hidden) closeResetConfirm(); });
+  document.getElementById("reset-yes").addEventListener("click", function(){
+    closeResetConfirm();
     var user = state.user;
     state = emptyProgress(user);
     persist();
