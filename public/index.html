@@ -81,6 +81,8 @@
     padding:0.9rem 1rem; font-family:"Oswald",sans-serif; text-transform:uppercase; letter-spacing:0.03em; font-size:0.95rem; font-weight:700;
   }
   .gate-submit:hover{ background:var(--accent-strong); }
+  .gate-note.gate-error{ color:var(--bad); font-weight:600; }
+  .gate-submit:disabled{ opacity:0.7; cursor:wait; }
   .gate-note{ margin-top:0.9rem; font-size:0.76rem; color:var(--ink-muted); text-align:center; }
 
   /* ---------- HUD: шапка у стилі сайту YBC (Oswald для підписів, Manrope для тексту й кнопок) ---------- */
@@ -497,7 +499,8 @@
       </div>
       <button class="gate-submit" id="gate-submit">Розпочати онбординг</button>
       <p class="gate-note" id="gate-saved" hidden>Ми знайшли твій прогрес. Він збережеться й відновиться після входу.</p>
-      <p class="gate-note">Ці дані підуть у звіт для HR, щоб бачити прогрес проходження онбордингу. У тесті карти посади HR також бачить питання, на яких були помилки: це допомагає підтримати тебе й покращити матеріали. Щоб продовжити пізніше, увійди з тією самою поштою в цьому ж браузері.</p>
+      <p class="gate-note gate-error" id="gate-error" hidden>Не вдалося завантажити твій прогрес. Перевір інтернет і спробуй ще раз.</p>
+      <p class="gate-note">Ці дані підуть у звіт для HR, щоб бачити прогрес проходження онбордингу. У тесті карти посади HR також бачить питання, на яких були помилки: це допомагає підтримати тебе й покращити матеріали. Щоб продовжити пізніше, увійди з тією самою поштою: прогрес збережеться й відновиться на будь-якому пристрої.</p>
     </div>
   </div>
 </div>
@@ -1529,13 +1532,14 @@
   var store = { current:null, users:{} };
   // mistakes: { "ID питання": {chosen, at} }, питання зникає, коли на нього відповіли правильно.
   // attempts: { "id модуля": номер останньої спроби }. demoLocks: лише для режиму демонстрації.
-  function emptyProgress(user){ return { user:user || null, passed:{}, opened:{}, finalPassed:false, score:0, correct:0, answered:0, mistakes:{}, attempts:{}, demoLocks:false }; }
+  function emptyProgress(user){ return { user:user || null, passed:{}, opened:{}, finalPassed:false, score:0, correct:0, answered:0, mistakes:{}, attempts:{}, demoLocks:false, updatedAt:0 }; }
   function normalizeProgress(src){
     return { user:src.user, passed:src.passed || {}, opened:src.opened || {}, finalPassed:!!src.finalPassed,
       score:typeof src.score === "number" ? src.score : 0,
       correct:typeof src.correct === "number" ? src.correct : 0,
       answered:typeof src.answered === "number" ? src.answered : 0,
-      mistakes:src.mistakes || {}, attempts:src.attempts || {}, demoLocks:!!src.demoLocks };
+      mistakes:src.mistakes || {}, attempts:src.attempts || {}, demoLocks:!!src.demoLocks,
+      updatedAt:typeof src.updatedAt === "number" ? src.updatedAt : 0 };
   }
   function emailKey(email){ return String(email || "").trim().toLowerCase(); }
 
@@ -1563,9 +1567,11 @@
     store.current = null;
   }
 
-  function persist(){
+  // noStamp: зберегти без позначки часу (коли дані лише відновлено й не змінено).
+  function persist(noStamp){
     try{
       if(state.user){
+        if(noStamp !== true) state.updatedAt = Date.now();
         store.current = emailKey(state.user.email);
         store.users[store.current] = state;
       } else {
@@ -1573,6 +1579,74 @@
       }
       localStorage.setItem(STORE_KEY, JSON.stringify(store));
     }catch(e){}
+    if(state.user && noStamp !== true) scheduleSync();
+  }
+
+  // ---------- прогрес на сервері (таблиця) ----------
+  // Прогрес зберігається у вкладці «Прогрес» таблиці за поштою, тож вхід з тією
+  // самою поштою відновлює його в будь-якому браузері. Береться новіша копія.
+  var syncTimer = null;
+  function remoteEnabled(){ return !!SHEET_WEBHOOK_URL && SHEET_WEBHOOK_URL.indexOf("ВСТАВТЕ") !== 0; }
+
+  function progressPayload(){
+    return {
+      type:"progress", email:state.user.email, name:state.user.name, position:state.user.position,
+      updatedAt:state.updatedAt,
+      progress:{
+        passed:state.passed, opened:state.opened, finalPassed:state.finalPassed,
+        score:state.score, correct:state.correct, answered:state.answered,
+        attempts:state.attempts, demoLocks:state.demoLocks, mistakes:Object.keys(state.mistakes)
+      }
+    };
+  }
+  function scheduleSync(){
+    if(!remoteEnabled() || !state.user) return;
+    clearTimeout(syncTimer);
+    syncTimer = setTimeout(flushSync, 1500);
+  }
+  function flushSync(){
+    clearTimeout(syncTimer); syncTimer = null;
+    if(!remoteEnabled() || !state.user) return;
+    postToSheet(progressPayload());
+  }
+  document.addEventListener("visibilitychange", function(){
+    if(document.visibilityState === "hidden" && syncTimer) flushSync();
+  });
+
+  // Завантаження прогресу з сервера. ok:false означає, що відповіді немає (мережа, таймаут).
+  function loadRemote(email){
+    return new Promise(function(resolve){
+      if(!remoteEnabled()){ resolve({ ok:true, found:false }); return; }
+      var finished = false;
+      var timer = setTimeout(function(){ if(!finished){ finished = true; resolve({ ok:false }); } }, 10000);
+      fetch(SHEET_WEBHOOK_URL, {
+        method:"POST",
+        headers:{ "Content-Type":"text/plain;charset=utf-8" },
+        body: JSON.stringify({ type:"load", email:email })
+      }).then(function(r){ return r.json(); }).then(function(j){
+        if(finished) return; finished = true; clearTimeout(timer);
+        resolve({ ok:true, found:!!(j && j.found), updatedAt:(j && j.updatedAt) || 0, progress:(j && j.progress) || null });
+      }).catch(function(){
+        if(finished) return; finished = true; clearTimeout(timer);
+        resolve({ ok:false });
+      });
+    });
+  }
+
+  function stateFromRemote(r, user){
+    var p = r.progress || {};
+    var s = emptyProgress(user);
+    s.passed = p.passed || {};
+    s.opened = p.opened || {};
+    s.finalPassed = !!p.finalPassed;
+    s.score = +p.score || 0;
+    s.correct = +p.correct || 0;
+    s.answered = +p.answered || 0;
+    s.attempts = p.attempts || {};
+    s.demoLocks = !!p.demoLocks;
+    (p.mistakes || []).forEach(function(id){ s.mistakes[id] = { chosen:"", at:"" }; });
+    s.updatedAt = r.updatedAt || 0;
+    return s;
   }
 
   function isAdmin(){ return !!(state.user && ADMIN_EMAILS.indexOf(emailKey(state.user.email)) >= 0); }
@@ -1588,6 +1662,7 @@
       fetch(SHEET_WEBHOOK_URL, {
         method:"POST",
         mode:"no-cors",
+        keepalive:true,
         headers:{ "Content-Type":"text/plain;charset=utf-8" },
         body: JSON.stringify(payload)
       });
@@ -1697,19 +1772,49 @@
     var emailOk = validEmail(email);
     document.getElementById("f-email").classList.toggle("err", !emailOk); if(!emailOk) ok = false;
     if(!ok) return;
-    var existing = store.users[emailKey(email)];
-    if(existing){
-      // Та сама пошта: відновлюємо прогрес, оновлюємо ім'я та посаду
-      state = normalizeProgress(existing);
-      state.user = { name:name, position:position, email:email };
+
+    var btn = document.getElementById("gate-submit");
+    var errEl = document.getElementById("gate-error");
+    errEl.hidden = true;
+    btn.disabled = true;
+    var btnText = btn.textContent;
+    btn.textContent = "Завантажуємо прогрес...";
+
+    var local = store.users[emailKey(email)];
+    loadRemote(email).then(function(r){
+      btn.disabled = false;
+      btn.textContent = btnText;
+      var user = { name:name, position:position, email:email };
+
+      // Немає відповіді сервера, а на цьому пристрої прогресу теж немає: краще не
+      // починати з нуля, щоб не затерти збережене.
+      if(!r.ok && !local){
+        errEl.hidden = false;
+        return;
+      }
+
+      var chosen = null;
+      if(r.ok && r.found){
+        var remoteState = stateFromRemote(r, user);
+        chosen = (local && (local.updatedAt || 0) > remoteState.updatedAt) ? normalizeProgress(local) : remoteState;
+      } else if(local){
+        chosen = normalizeProgress(local);
+      }
+
+      if(chosen){
+        // Та сама пошта: відновлюємо прогрес, оновлюємо ім'я та посаду.
+        // Якщо сервер не відповів, мітку часу не оновлюємо: так ми не затремо новішу копію.
+        state = chosen;
+        state.user = user;
+        persist(!r.ok);
+        showMain();
+        return;
+      }
+      state = emptyProgress(user);
       persist();
+      sendEvent("start", "Розпочав(-ла) онбординг", "старт");
       showMain();
-      return;
-    }
-    state = emptyProgress({ name:name, position:position, email:email });
-    persist();
-    sendEvent("start", "Розпочав(-ла) онбординг", 0);
-    showMain();
+    });
   });
 
   // Якщо пошта вже відома, підставляємо ім'я та посаду і попереджаємо,
@@ -1727,7 +1832,8 @@
   });
 
   document.getElementById("logout-btn").addEventListener("click", function(){
-    persist();
+    persist(true);
+    flushSync();
     state = emptyProgress();
     persist();
     document.getElementById("in-name").value = "";
@@ -1738,7 +1844,26 @@
     showGate();
   });
 
-  if(state.user){ showMain(); } else { showGate(); }
+  if(state.user){ showMain(); pullRemoteOnStart(); } else { showGate(); }
+
+  // Сторінка відкрилась із наявним входом: перевіряємо, чи на іншому пристрої
+  // немає новішого прогресу, і підтягуємо його.
+  function pullRemoteOnStart(){
+    var email = state.user.email;
+    loadRemote(email).then(function(r){
+      if(!r.ok || !state.user || emailKey(state.user.email) !== emailKey(email)) return;
+      var localTime = state.updatedAt || 0;
+      if(r.found && r.updatedAt > localTime){
+        if(!document.getElementById("overlay").hidden) return; // не перериваємо тест
+        var user = state.user;
+        state = stateFromRemote(r, user);
+        persist(true);
+        showMain();
+      } else if(!r.found || r.updatedAt < localTime){
+        scheduleSync(); // на сервері менше даних: відправляємо збережене тут
+      }
+    });
+  }
 
   // ---------- board logic ----------
   function passedCount(){ return Object.keys(state.passed).filter(function(k){return state.passed[k];}).length; }
