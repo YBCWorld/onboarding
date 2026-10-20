@@ -2079,7 +2079,19 @@
     });
   }
 
-  function closeDossier(){ document.getElementById("overlay").hidden = true; }
+  // Незавершена спроба тесту: якщо людина закрила вікно або сторінку посеред тесту,
+  // уже дані відповіді все одно йдуть у таблицю (з позначкою «незавершено»).
+  var activeQuiz = null;
+  function flushActiveQuiz(){
+    var a = activeQuiz;
+    if(!a || a.sent || !a.q.log.length) return;
+    a.sent = true;
+    sendLoggedAnswers(a.kind + " (незавершено)", a.attempt || "", a.q.log, "незавершено: " + a.q.log.length + " із " + a.total);
+  }
+  document.addEventListener("visibilitychange", function(){ if(document.visibilityState === "hidden") flushActiveQuiz(); });
+  window.addEventListener("pagehide", flushActiveQuiz);
+
+  function closeDossier(){ flushActiveQuiz(); document.getElementById("overlay").hidden = true; }
   document.getElementById("overlay").addEventListener("click", function(e){ if(e.target.id==="overlay") closeDossier(); });
 
   // Поки відкрите вікно матеріалу чи тесту, сторінка під ним не прокручується.
@@ -2136,6 +2148,8 @@
       persist();
     }
     var q = { order: shuffle(questions.map(function(_,i){return i;})), index:0, correct:0, streak:0, wrong:[], log:[] };
+    flushActiveQuiz(); // попередня незавершена спроба (якщо була) не губиться
+    activeQuiz = { q:q, kind:opts.kind || "Тест", attempt:attempt, total:q.order.length, sent:false };
     document.getElementById("overlay").hidden = false;
     renderQ();
 
@@ -2201,6 +2215,7 @@
       var summary = q.correct + "/" + total;
 
       // Відповіді на питання тесту посади йдуть у відповідну вкладку таблиці.
+      if(activeQuiz && activeQuiz.q === q) activeQuiz.sent = true;
       sendLoggedAnswers(opts.kind || "Тест", attempt || "", q.log, practice ? summary : summary + " · " + (pass ? "Пройдено" : "Не пройдено"));
 
       var head, sub;
