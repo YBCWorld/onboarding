@@ -5,9 +5,12 @@
  *  - вкладка "Загальне": старт, проходження модулів 1-6, фінальний тест;
  *  - вкладка "Sales Warsaw": відповіді на тест сьомого модуля для посади
  *    "Сейлз-менеджер Варшава" (по одному рядку на відповідь + рядок "ПІДСУМОК").
- *  - вкладка "Прогрес" (створюється сама): збережений прогрес кожного
+ *  - вкладка "Прогрес" (службова, прихована): збережений прогрес кожного
  *    співробітника за поштою, щоб він не залежав від браузера й пристрою.
  *    Її не редагуйте вручну.
+ *  - Хід проходження співробітників "Сейлз-менеджер Варшава" (початок,
+ *    пройдені модулі, фінальний тест) дублюється рядками "Прогрес" у вкладку
+ *    "Sales Warsaw", поруч із відповідями на тест.
  * Вкладки шукаються за номером (gid), потім за назвою. Якщо вкладки немає,
  * вона створюється.
  *
@@ -110,6 +113,42 @@ function appendByHeaders_(sheet, rowObjects, textColumns) {
   return { start: start, headers: headers };
 }
 
+// Посада -> ключ вкладки (ANSWER_TABS), куди дублюється хід проходження
+// (старт, пройдені модулі, фінальний тест), щоб він був видний поруч із відповідями.
+var POSITION_TAB = {
+  "Сейлз-менеджер Варшава": "Sales Warsaw"
+};
+
+function eventLabel_(event, details) {
+  if (event === "start") return "Початок онбордингу";
+  if (event === "module_pass") return "Модуль пройдено: " + details;
+  if (event === "module_read") return "Модуль завершено: " + details;
+  if (event === "final_pass") return "Фінальний тест пройдено";
+  return String(event);
+}
+
+// Рядок "Прогрес" у вкладці посади: що й коли пройшла людина.
+function progressObject_(data, when) {
+  var passed = data.event === "module_pass" || data.event === "module_read" || data.event === "final_pass";
+  return {
+    "Дата/час": when,
+    "Ім'я": clean_(data.name),
+    "Email": clean_(data.email),
+    "Тип": "Прогрес",
+    "Питання": clean_(eventLabel_(data.event, data.details)),
+    "Результат": passed ? "Пройдено" : "",
+    "Підсумок спроби": data.event === "start" ? "" : clean_(data.score)
+  };
+}
+
+function writeProgressRow_(ss, tabKey, data) {
+  var tab = ANSWER_TABS[tabKey];
+  if (!tab) return;
+  var sheet = getTab_(ss, tab);
+  ensureHeaders_(sheet, ANSWER_HEADERS);
+  appendByHeaders_(sheet, [progressObject_(data, new Date())], ["Підсумок спроби"]);
+}
+
 function writeGeneral_(ss, data) {
   var sheet = getTab_(ss, GENERAL_TAB);
   ensureHeaders_(sheet, GENERAL_HEADERS);
@@ -122,6 +161,61 @@ function writeGeneral_(ss, data) {
     "Деталі": clean_(data.details),
     "Бал/Рахунок": data.score !== undefined ? clean_(data.score) : ""
   }], ["Бал/Рахунок"]);
+
+  var tabKey = POSITION_TAB[String(data.position || "")];
+  if (tabKey) writeProgressRow_(ss, tabKey, data);
+}
+
+/**
+ * Одноразово: переносить у вкладку "Sales Warsaw" уже наявні події проходження
+ * (старт, модулі, фінальний тест) співробітників "Сейлз-менеджер Варшава" з
+ * вкладки "Загальне". Повторний запуск дублікатів не створює.
+ * Запуск: вибрати "backfillSalesWarsaw" і натиснути Run.
+ */
+function backfillSalesWarsaw() {
+  var ss = SpreadsheetApp.openById(SPREADSHEET_ID);
+  progressSheet_(ss); // заодно ховає службову вкладку "Прогрес"
+  var general = getTab_(ss, GENERAL_TAB);
+  var last = general.getLastRow();
+  if (last < 2) return;
+  var gHeaders = general.getRange(1, 1, 1, general.getLastColumn()).getValues()[0].map(function (h) { return String(h).trim(); });
+  var rows = general.getRange(2, 1, last - 1, general.getLastColumn()).getValues();
+  var idx = function (name) { return gHeaders.indexOf(name); };
+
+  var tab = ANSWER_TABS["Sales Warsaw"];
+  var sheet = getTab_(ss, tab);
+  ensureHeaders_(sheet, ANSWER_HEADERS);
+  var sHeaders = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0].map(function (h) { return String(h).trim(); });
+  var sLast = sheet.getLastRow();
+  var existing = {};
+  if (sLast > 1) {
+    var sRows = sheet.getRange(2, 1, sLast - 1, sHeaders.length).getValues();
+    var iEmail = sHeaders.indexOf("Email"), iQ = sHeaders.indexOf("Питання"), iT = sHeaders.indexOf("Тип");
+    sRows.forEach(function (r) {
+      if (iT >= 0 && r[iT] === "Прогрес") existing[String(r[iEmail]).toLowerCase() + "|" + r[iQ]] = true;
+    });
+  }
+
+  var toAdd = [];
+  rows.forEach(function (r) {
+    if (String(r[idx("Посада")]) !== "Сейлз-менеджер Варшава") return;
+    var event = String(r[idx("Подія")]);
+    if (["start", "module_pass", "module_read", "final_pass"].indexOf(event) < 0) return;
+    var data = {
+      name: r[idx("Ім'я")], email: r[idx("Email")], event: event,
+      details: r[idx("Деталі")], score: r[idx("Бал/Рахунок")]
+    };
+    var key = String(data.email).toLowerCase() + "|" + eventLabel_(event, data.details);
+    if (existing[key]) return;
+    existing[key] = true;
+    var when = r[idx("Дата/час")];
+    if (!(when instanceof Date)) {
+      var parsed = new Date(when);
+      when = isNaN(parsed.getTime()) ? new Date() : parsed;
+    }
+    toAdd.push(progressObject_(data, when));
+  });
+  if (toAdd.length) appendByHeaders_(sheet, toAdd, ["Підсумок спроби"]);
 }
 
 function writeAnswers_(ss, data) {
@@ -246,6 +340,10 @@ function progressSheet_(ss) {
     sheet.getRange(1, 1, 1, PROGRESS_HEADERS.length).setFontWeight("bold");
     sheet.getRange("A:E").setNumberFormat("@");
   }
+  // Це службова вкладка з кодами: ховаємо її. Скрипт читає її й прихованою.
+  try {
+    if (!sheet.isSheetHidden()) sheet.hideSheet();
+  } catch (err) {}
   return sheet;
 }
 
