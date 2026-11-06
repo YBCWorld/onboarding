@@ -363,6 +363,7 @@
   .admin-bar b{ font-family:"Oswald",sans-serif; font-weight:600; text-transform:uppercase; letter-spacing:0.06em; font-size:0.82rem; color:var(--ink); }
   .admin-bar p{ margin:0.2rem 0 0; font-size:0.82rem; color:var(--ink-muted); max-width:46ch; }
   .admin-bar .reset-btn{ white-space:nowrap; }
+  .admin-actions{ display:flex; gap:0.5rem; flex-wrap:wrap; }
   .mistakes-card{ margin-bottom:0.4rem; }
   .mist-head{ display:flex; align-items:center; justify-content:space-between; gap:0.8rem; }
   .mist-head .mini-btn{ flex:none; }
@@ -503,9 +504,8 @@
         <div class="err-msg">Введіть коректний email</div>
       </div>
       <button class="gate-submit" id="gate-submit">Розпочати онбординг</button>
-      <p class="gate-note" id="gate-saved" hidden>Ми знайшли твій прогрес. Він збережеться й відновиться після входу.</p>
       <p class="gate-note gate-error" id="gate-error" hidden>Не вдалося завантажити твій прогрес. Перевір інтернет і спробуй ще раз.</p>
-      <p class="gate-note">Ці дані підуть у звіт для HR, щоб бачити прогрес проходження онбордингу. У тесті карти посади HR також бачить питання, на яких були помилки: це допомагає підтримати тебе й покращити матеріали. Щоб продовжити пізніше, увійди з тією самою поштою: прогрес збережеться й відновиться на будь-якому пристрої.</p>
+      <p class="gate-note">Щоб продовжити пізніше, увійди з тією самою поштою.</p>
     </div>
   </div>
 </div>
@@ -549,7 +549,10 @@
       <b>Режим демонстрації</b>
       <p id="admin-text"></p>
     </div>
-    <button class="reset-btn" id="admin-toggle"></button>
+    <div class="admin-actions">
+      <button class="reset-btn" id="admin-next">Показати «Що далі»</button>
+      <button class="reset-btn" id="admin-toggle"></button>
+    </div>
   </div>
 
   <div class="brief">
@@ -1911,6 +1914,13 @@
     var btn = document.getElementById("admin-toggle");
     btn.textContent = free ? "Увімкнути послідовність" : "Відкрити все без обмежень";
   }
+  // Лише перегляд: показує блок «Що далі» без фінального тесту (прогрес не змінюється).
+  document.getElementById("admin-next").addEventListener("click", function(){
+    renderNextSteps();
+    document.getElementById("synth-locked").hidden = true;
+    document.getElementById("synth-unlocked").hidden = false;
+    document.getElementById("synth-unlocked").scrollIntoView({ behavior:"smooth", block:"start" });
+  });
   document.getElementById("admin-toggle").addEventListener("click", function(){
     state.demoLocks = !state.demoLocks;
     persist();
@@ -1972,17 +1982,12 @@
     });
   });
 
-  // Якщо пошта вже відома, підставляємо ім'я та посаду і попереджаємо,
-  // що прогрес збережеться.
+  // Якщо пошта вже відома, підставляємо ім'я та посаду.
   document.getElementById("in-email").addEventListener("input", function(){
     var saved = store.users[emailKey(this.value)];
-    var note = document.getElementById("gate-saved");
     if(saved && saved.user){
       document.getElementById("in-name").value = saved.user.name;
       document.getElementById("in-position").value = saved.user.position;
-      note.hidden = false;
-    } else {
-      note.hidden = true;
     }
   });
 
@@ -1994,7 +1999,6 @@
     document.getElementById("in-name").value = "";
     document.getElementById("in-position").value = "";
     document.getElementById("in-email").value = "";
-    document.getElementById("gate-saved").hidden = true;
     document.getElementById("overlay").hidden = true;
     showGate();
   });
@@ -2286,10 +2290,9 @@
 
   function checkSynthesis(){
     renderNextSteps();
-    if(state.finalPassed){
-      document.getElementById("synth-locked").hidden = true;
-      document.getElementById("synth-unlocked").hidden = false;
-    }
+    var done = !!state.finalPassed;
+    document.getElementById("synth-locked").hidden = done;
+    document.getElementById("synth-unlocked").hidden = !done;
   }
 
   // ---------- generic quiz engine ----------
