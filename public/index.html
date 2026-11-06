@@ -505,7 +505,7 @@
       </div>
       <button class="gate-submit" id="gate-submit">Розпочати онбординг</button>
       <p class="gate-note gate-error" id="gate-error" hidden>Не вдалося завантажити твій прогрес. Перевір інтернет і спробуй ще раз.</p>
-      <p class="gate-note">Щоб продовжити пізніше, увійди з тією самою поштою.</p>
+      <p class="gate-note">Щоб продовжити пізніше, увійди за тією самою поштою.</p>
     </div>
   </div>
 </div>
@@ -1987,7 +1987,8 @@
     var saved = store.users[emailKey(this.value)];
     if(saved && saved.user){
       document.getElementById("in-name").value = saved.user.name;
-      document.getElementById("in-position").value = saved.user.position;
+      // стара назва посади підміняється новою, щоб вона була в списку
+      document.getElementById("in-position").value = POSITION_ALIAS[saved.user.position] || saved.user.position;
     }
   });
 
