@@ -350,3 +350,49 @@ function testWrite() {
     ]
   });
 }
+
+// ---------------------------------------------------------------------
+// Однакова шапка й закріплений перший рядок у всіх вкладках.
+// Запустіть один раз вручну (вибрати "setupLayout" і натиснути Run).
+// Шапка вкладок "BM Kyiv" і "Community Franchise" копіюється з вкладки
+// "Sales Warsaw" (порядок колонок як у ній). Рядки, що вже є в цих
+// вкладках, переставляються за назвами колонок, нічого не губиться.
+// Далі в усіх вкладках перший рядок закріплюється й виділяється жирним.
+// ---------------------------------------------------------------------
+function setupLayout() {
+  var ss = SpreadsheetApp.openById(SPREADSHEET_ID);
+  var ref = getTab_(ss, ANSWER_TABS["Sales Warsaw"]);
+  var refWidth = Math.max(ref.getLastColumn(), 1);
+  var refHeaders = ref.getRange(1, 1, 1, refWidth).getValues()[0];
+
+  ["BM Kyiv", "Community Franchise"].forEach(function (key) {
+    var sheet = getTab_(ss, ANSWER_TABS[key]);
+    var lastRow = sheet.getLastRow();
+    var lastCol = Math.max(sheet.getLastColumn(), 1);
+    var oldHeaders = [];
+    var oldData = [];
+    if (lastRow >= 1) {
+      oldHeaders = sheet.getRange(1, 1, 1, lastCol).getValues()[0].map(function (h) { return String(h).trim(); });
+      if (lastRow > 1) oldData = sheet.getRange(2, 1, lastRow - 1, lastCol).getValues();
+    }
+    var newData = oldData.map(function (row) {
+      return refHeaders.map(function (h) {
+        var name = String(h).trim();
+        var idx = name ? oldHeaders.indexOf(name) : -1;
+        return idx >= 0 ? row[idx] : "";
+      });
+    });
+    sheet.clearContents();
+    sheet.getRange(1, 1, 1, refHeaders.length).setValues([refHeaders]);
+    if (newData.length) sheet.getRange(2, 1, newData.length, refHeaders.length).setValues(newData);
+    ensureHighlightRule_(sheet, refHeaders.map(function (h) { return String(h).trim(); }));
+  });
+
+  var names = [GENERAL_TAB.name, "Sales Warsaw", "BM Kyiv", "Community Franchise", "Прогрес"];
+  ss.getSheets().forEach(function (sheet) {
+    if (names.indexOf(sheet.getName()) < 0) return;
+    if (sheet.getLastRow() < 1) return;
+    sheet.setFrozenRows(1);
+    sheet.getRange(1, 1, 1, Math.max(sheet.getLastColumn(), 1)).setFontWeight("bold");
+  });
+}
