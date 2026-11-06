@@ -50,7 +50,8 @@ var GENERAL_HEADERS = ["Дата/час", "Ім'я", "Посада", "Email", "�
 // Дозволені вкладки для відповідей на тести (ключ приходить із сайту).
 var ANSWER_TABS = {
   "Sales Warsaw": { gid: 1685318998, name: "Sales Warsaw" },
-  "BM Kyiv": { gid: 228485333, name: "BM Kyiv" }
+  "BM Kyiv": { gid: 228485333, name: "BM Kyiv" },
+  "Community Franchise": { gid: -1, name: "Community Franchise" }
 };
 var ANSWER_HEADERS = [
   "Дата/час", "Ім'я", "Email", "Спроба", "Тип", "№ у спробі", "ID питання", "Категорія",
